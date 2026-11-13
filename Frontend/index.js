@@ -3,60 +3,89 @@ const amount = document.getElementById("amount");
 const description = document.getElementById("description");
 const category = document.getElementById("category");
 const expenseList = document.getElementById("expense-list");
-const button = document.getElementById("submit-btn");
+const button = expenseForm.querySelector('button[type="submit"]');
 
-let expense = [];
+const API_URL = "/expenses";
+
 let editId = null;
 
-expenseForm.addEventListener("submit", function (event) {
+async function getExpenses() {
+  try {
+    const response = await fetch(API_URL);
+
+    if (!response.ok) {
+      throw new Error("Unable to fetch expenses");
+    }
+
+    const expenses = await response.json();
+
+    displayExpense(expenses);
+  } catch (error) {
+    console.error(error);
+    alert("Unable to load expenses");
+  }
+}
+
+expenseForm.addEventListener("submit", async function (event) {
   event.preventDefault();
 
-  const amountValue = Number(amount.value);
-  const descriptionValue = description.value.trim();
-  const categoryValue = category.value;
+  const expenseData = {
+    amount: Number(amount.value),
+    description: description.value.trim(),
+    category: category.value,
+  };
 
-  if (amountValue <= 0 || descriptionValue === "" || categoryValue === "") {
+  if (
+    expenseData.amount <= 0 ||
+    expenseData.description === "" ||
+    expenseData.category === ""
+  ) {
     alert("Please enter valid expense details");
     return;
   }
 
-  if (editId !== null) {
-    const exp = expense.find(function (item) {
-      return item.id === editId;
-    });
+  try {
+    let response;
 
-    if (exp) {
-      exp.amount = amountValue;
-      exp.description = descriptionValue;
-      exp.category = categoryValue;
+    if (editId !== null) {
+      response = await fetch(`${API_URL}/${editId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(expenseData),
+      });
+    } else {
+      response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(expenseData),
+      });
     }
 
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || "Operation failed");
+    }
+
+    expenseForm.reset();
     editId = null;
     button.textContent = "Add Expense";
-  } else {
-    const newExpense = {
-      id: Date.now(),
-      amount: amountValue,
-      description: descriptionValue,
-      category: categoryValue,
-    };
 
-    expense.push(newExpense);
+    await getExpenses();
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
   }
-
-  displayExpense();
-  // expenseForm.reset();
 });
-
-function displayExpense() {
+function displayExpense(expenses) {
   expenseList.innerHTML = "";
-
-  expense.forEach(function (item) {
+  expenses.forEach(function (item) {
     const li = document.createElement("li");
-
-    li.className =
-      "list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2";
-
+    li.className ="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2";
     const details = document.createElement("div");
     const title = document.createElement("h5");
     title.textContent = item.description;
@@ -64,7 +93,7 @@ function displayExpense() {
     categoryText.className = "mb-1 text-muted";
     categoryText.textContent = item.category;
     const amountText = document.createElement("strong");
-    amountText.textContent = "₹" + item.amount.toFixed(2);
+    amountText.textContent = "₹" + Number(item.amount).toFixed(2);
     details.appendChild(title);
     details.appendChild(categoryText);
     details.appendChild(amountText);
@@ -72,7 +101,7 @@ function displayExpense() {
     editButton.textContent = "Edit";
     editButton.className = "btn btn-warning btn-sm me-2";
     editButton.addEventListener("click", function () {
-      editExpense(item.id);
+      editExpense(item);
     });
     const deleteButton = document.createElement("button");
     deleteButton.textContent = "Delete";
@@ -83,41 +112,38 @@ function displayExpense() {
     details.appendChild(editButton);
     details.appendChild(deleteButton);
     li.appendChild(details);
-     expenseList.appendChild(li);
+    expenseList.appendChild(li);
   });
 }
-
-function editExpense(id) {
-  const exp = expense.find(function (item) {
-    return item.id === id;
-  });
-
-  if (!exp) {
-    return;
-  }
-
-  amount.value = exp.amount;
-  description.value = exp.description;
-  category.value = exp.category;
-
-  editId = id;
+function editExpense(item) {
+  amount.value = item.amount;
+  description.value = item.description;
+  category.value = item.category;
+  editId = item.id;
   button.textContent = "Update Expense";
-
   expenseForm.scrollIntoView({
     behavior: "smooth",
     block: "center",
   });
 }
-
-function deleteExpense(id) {
-  expense = expense.filter(function (item) {
-    return item.id !== id;
-  });
-
-  if (editId === id) {
-    editId = null;
-    expenseForm.reset();
-    button.textContent = "Add Expense";
+async function deleteExpense(id) {
+  try {
+    const response = await fetch(`${API_URL}/${id}`, {
+      method: "DELETE",
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.message || "Unable to delete expense");
+    }
+    if (String(editId) === String(id)) {
+      editId = null;
+      expenseForm.reset();
+      button.textContent = "Add Expense";
+    }
+    await getExpenses();
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
   }
-  displayExpense();
 }
+getExpenses();
